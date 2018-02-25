@@ -1,6 +1,12 @@
 package com.softwaredevelopmentstuff.blockchain;
 
-import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.IntStream;
 
 import static com.softwaredevelopmentstuff.blockchain.HashUtil.sha256;
 
@@ -11,58 +17,68 @@ public class Block {
     private long timestamp;
     private int nonce = 0;
 
-    Block(String data, Block previousBlock) throws NoSuchAlgorithmException {
+    Block(String data, Block previousBlock) {
         this.previousHash = previousBlock != null ? previousBlock.getHash() : "";
         this.data = data;
         this.timestamp = System.currentTimeMillis();
-        this.hash = computeHash();
+        this.hash = computeHash(nonce);
     }
 
-    public String computeHash() throws NoSuchAlgorithmException {
+    public String computeHash(int nonce) {
         return sha256(previousHash + data + String.valueOf(timestamp) + nonce);
     }
 
-    public void mineBlock(int difficulty) throws NoSuchAlgorithmException {
-        String target = new String(new char[difficulty]).replace('\0', '0');
+    public void mineBlock(int difficulty) {
+        final String target = new String(new char[difficulty]).replace('\0', '0');
+        final AtomicBoolean found = new AtomicBoolean(false);
+        final int nThreads = 8;
 
-        while (!hash.substring(0, difficulty).equals(target)) {
-            nonce++;
-            hash = computeHash();
+        ExecutorService executorService = Executors.newFixedThreadPool(8);
+        Collection<Callable<Integer>> callables = new ArrayList<>();
+
+        IntStream.range(0, 8).forEach(i -> callables.add(() -> {
+            int currentNo = i;
+
+            while (!found.get()) {
+                String tmpHash = computeHash(currentNo);
+
+                if (tmpHash.substring(0, difficulty).equals(target)) {
+                    found.set(true);
+
+                    synchronized (this) {
+                        this.nonce = currentNo;
+                        this.hash = tmpHash;
+                    }
+                }
+                currentNo += nThreads;
+            }
+
+            return currentNo;
+        }));
+
+        try {
+            executorService.invokeAll(callables);
+        } catch (InterruptedException e) {
+            throw new RuntimeException("Unable to mine block. Tried for 1 hour.", e);
         }
 
-        System.out.println("Block mined! " + hash);
+        System.out.println("Block mined! " + hash + " Nonce: " + nonce);
     }
 
     public String getHash() {
         return hash;
     }
 
-    public void setHash(String hash) {
-        this.hash = hash;
-    }
-
     public String getPreviousHash() {
         return previousHash;
-    }
-
-    public void setPreviousHash(String previousHash) {
-        this.previousHash = previousHash;
     }
 
     public String getData() {
         return data;
     }
 
-    public void setData(String data) {
-        this.data = data;
-    }
-
     public long getTimestamp() {
         return timestamp;
-    }
-
-    public void setTimestamp(long timestamp) {
-        this.timestamp = timestamp;
     }
 
     public int getNonce() {
