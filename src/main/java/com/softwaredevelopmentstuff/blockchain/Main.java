@@ -8,7 +8,14 @@ public class Main {
     public static void main(String[] args) throws JsonProcessingException {
         Blockchain blockchain = new Blockchain(6);
 
-        IntStream.range(1, 10).forEach(i -> blockchain.createBlock("block" + i));
+        IntStream.range(1, 5).forEach(i -> {
+            Block previousBlock = blockchain.getLatestBlock();
+
+            Block block = new Block("block " + i, previousBlock);
+            block.mine(blockchain.getDifficulty());
+
+            blockchain.addBlock(block);
+        });
 
         System.out.println(blockchain.toJson());
         System.out.println("Blockchain valid: " + blockchain.isValid());
