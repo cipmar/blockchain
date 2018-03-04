@@ -24,48 +24,6 @@ public class Block {
         this.hash = computeHash(nonce);
     }
 
-    public String computeHash(int nonce) {
-        return sha256(previousHash + data + String.valueOf(timestamp) + nonce);
-    }
-
-    public void mine(int difficulty) {
-        final String target = new String(new char[difficulty]).replace('\0', '0');
-        final AtomicBoolean found = new AtomicBoolean(false);
-        final int nThreads = 8;
-
-        ExecutorService executorService = Executors.newFixedThreadPool(8);
-        Collection<Callable<Integer>> callables = new ArrayList<>();
-
-        IntStream.range(0, 8).forEach(i -> callables.add(() -> {
-            int currentNo = i;
-
-            while (!found.get()) {
-                String tmpHash = computeHash(currentNo);
-
-                if (tmpHash.substring(0, difficulty).equals(target)) {
-                    found.set(true);
-
-                    synchronized (this) {
-                        this.nonce = currentNo;
-                        this.hash = tmpHash;
-                    }
-                }
-                currentNo += nThreads;
-            }
-
-            return currentNo;
-        }));
-
-        try {
-            executorService.invokeAll(callables);
-            executorService.shutdown();
-        } catch (InterruptedException e) {
-            throw new RuntimeException("Unable to mine block. Tried for 1 hour.", e);
-        }
-
-        System.out.println("Block mined! " + hash + " Nonce: " + nonce);
-    }
-
     public String getHash() {
         return hash;
     }
@@ -78,16 +36,61 @@ public class Block {
         return data;
     }
 
-    public long getTimestamp() {
-        return timestamp;
-    }
-
     public int getNonce() {
         return nonce;
     }
 
-    public void setNonce(int nonce) {
-        this.nonce = nonce;
+    public long getTimestamp() {
+        return timestamp;
+    }
+
+    public String computeHash() {
+        return computeHash(this.nonce);
+    }
+
+    public void mine(int difficulty) {
+        final String target = new String(new char[difficulty]).replace('\0', '0');
+        final AtomicBoolean found = new AtomicBoolean(false);
+        final int nThreads = Runtime.getRuntime().availableProcessors();
+
+        System.out.println(String.format("Starting %s threads...", nThreads));
+
+        ExecutorService executorService = Executors.newFixedThreadPool(nThreads);
+        Collection<Callable<Integer>> callables = new ArrayList<>();
+
+        IntStream.range(0, nThreads).forEach(i -> callables.add(() -> {
+            int currentNonce = Integer.MIN_VALUE + i;
+
+            while (!found.get()) {
+                String tmpHash = computeHash(currentNonce);
+
+                if (tmpHash.substring(0, difficulty).equals(target)) {
+                    found.set(true);
+
+                    synchronized (this) {
+                        System.out.println(Thread.currentThread().getName() + " found the block!");
+                        this.nonce = currentNonce;
+                        this.hash = tmpHash;
+                    }
+                }
+                currentNonce += nThreads;
+            }
+
+            return currentNonce;
+        }));
+
+        try {
+            executorService.invokeAll(callables);
+            executorService.shutdown();
+        } catch (InterruptedException e) {
+            throw new RuntimeException("Unable to mine block. Tried for 1 hour.", e);
+        }
+
+        System.out.println("Block mined! " + hash + " Nonce: " + nonce);
+    }
+
+    private String computeHash(int nonce) {
+        return sha256(previousHash + data + timestamp + nonce);
     }
 
     @Override

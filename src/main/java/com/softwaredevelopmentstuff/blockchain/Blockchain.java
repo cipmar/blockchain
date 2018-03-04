@@ -53,7 +53,7 @@ public class Blockchain {
         }
 
         // correct hash
-        if (!block.getHash().equals(block.computeHash(block.getNonce()))) {
+        if (!block.getHash().equals(block.computeHash())) {
             System.out.println("Invalid block - incorrect hash");
             return false;
         }
